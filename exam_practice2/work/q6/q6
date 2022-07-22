@@ -1,0 +1,118 @@
+#!/usr/bin/python3
+# COMP3311 20T2 Final Exam
+# Q6: discography for one group, given by Groups.id
+
+import sys
+import psycopg2
+
+# ... put helper functions here ...
+def getGroup(id):
+   cur = db.cursor()
+   qry = '''
+   select *
+   from groups g
+   where id = %s
+   '''
+   cur.execute(qry,[id])
+   info = cur.fetchone()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+def getAlbums(id):
+   cur = db.cursor()
+   qry = '''
+   select *
+   from albums
+   where made_by = %s
+   '''
+   cur.execute(qry,[id])
+   info = cur.fetchall()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+def getAlbumSongs(id):
+   cur = db.cursor()
+   qry = '''
+   select *
+   from songs
+   where on_album = %s
+   '''
+   cur.execute(qry,[id])
+   info = cur.fetchall()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+db = None
+cur = None
+usage = f"Usage: {sys.argv[0]} GroupID"
+
+# process command-line args
+
+if len(sys.argv) < 2:
+   print(usage)
+   exit(1)
+groupID = sys.argv[1]
+if not groupID.isnumeric():
+   print(usage)
+   exit(1)
+
+try:
+   db = psycopg2.connect("dbname=music")
+
+   # ... your code goes here ...
+   group = getGroup(groupID)
+
+   if group is None:
+      print("Invalid group ID")
+      exit()
+   
+   name = group[1]
+   print(f"Discography for {name}")
+
+   albums = getAlbums(groupID)
+
+   for album in albums:
+      albumID = album[0]
+      albumName = album[1]
+      albumYear = album[2]
+      albumGenre = album[4]
+      print("--------------------")
+      print(f"{albumName} ({albumYear}) ({albumGenre})")
+      print("--------------------")
+      # print(album)
+
+      trackno = 1
+      songs = getAlbumSongs(albumID)
+      for song in songs:
+         title = song[1]
+         seconds = song[2]
+
+         minutes = seconds // 60
+         seconds %= 60 
+         # print(song)
+         # print(f"{i}. {songName} (%02{minutes}:%02{seconds})")
+         print(f"%2d. %s (%d:%02d)" %(trackno, title, minutes, seconds))
+         trackno += 1
+
+
+
+except psycopg2.Error as err:
+   print("DB error: ", err)
+finally:
+   if cur:
+       cur.close()
+   if db:
+      db.close()
+

@@ -1,0 +1,18 @@
+# COMP3311 21T3 Final Exam Q10
+# BCNF normalization
+
+(A)
+
+FD: A->B, A->C, D->E, D->F
+
+
+(B)
+
+
+
+
+(C)
+
+
+FD's for student zid with their names and thesis topic, and FD's for supervisors id with names and specialties
+

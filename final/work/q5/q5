@@ -1,0 +1,191 @@
+#!/usr/bin/python3
+# COMP3311 21T3 exam ... property finder
+
+import sys
+import psycopg2
+import re
+
+# define any local helper functions here
+def getProperty(ptype):
+  cur = db.cursor()
+  qry = '''
+  select *
+  from properties 
+  where ptype = %s and sold_price is null
+  order by list_price, id
+  '''
+  cur.execute(qry,[ptype])
+  info = cur.fetchall()
+  cur.close()
+
+  if not info:
+    return None
+  else:
+    return info
+
+def getFeatures(id):
+  cur = db.cursor()
+  qry = '''
+  select f.feature, f.number
+  from features f
+    join properties p on p.id = f.property 
+  where p.id = %s
+  '''
+  cur.execute(qry,[id])
+  info = cur.fetchall()
+  cur.close()
+
+  if not info:
+    return None
+  else:
+    return info
+
+def getApartmentAddress(id):
+  cur = db.cursor()
+  qry = '''
+  select p.unit_no || '/' || p.street_no || ' ' || s.name || ' ' || s.stype || ', ' || sb.name || ' ' || sb.postcode
+  from properties p 
+    join streets s on s.id = p.street
+    join suburbs sb on sb.id = s.suburb
+  where p.id = %s
+  '''
+  cur.execute(qry,[id])
+  info = cur.fetchone()
+  cur.close()
+
+  if not info:
+    return None
+  else:
+    return info[0]
+
+def getHouseAddress(id):
+  cur = db.cursor()
+  qry = '''
+  select p.street_no || ' ' || s.name || ' ' || s.stype || ', ' || sb.name || ' ' || sb.postcode
+  from properties p 
+    join streets s on s.id = p.street
+    join suburbs sb on sb.id = s.suburb
+  where p.id = %s
+  '''
+  cur.execute(qry,[id])
+  info = cur.fetchone()
+  cur.close()
+
+  if not info:
+    return None
+  else:
+    return info[0]
+
+### set up some globals
+
+usage = f"Usage: {sys.argv[0]} type maxPrice #beds #baths #cars\n"\
+f"type is one of Apartment, House, Townhouse\n"\
+"maxPrice is upper bound; #x = exact match; 0 means don't care"
+
+types = ["Apartment", "House", "Townhouse"]
+db = None
+
+### process command-line args
+
+argc = len(sys.argv)
+if argc < 6:
+  print(usage)
+  exit(1)
+ptype = sys.argv[1]
+if not ptype in types:
+  print(usage)
+  exit(1)
+digits = re.compile("^\d+$")
+for arg in sys.argv[2:5]:
+  if not digits.match(arg):
+    print(usage)
+    exit(1)
+
+maxPrice = int(sys.argv[2])
+nbeds = int(sys.argv[3])
+nbaths = int(sys.argv[4])
+ncars = int(sys.argv[5])
+
+# manipulate database
+
+try:
+
+  # ... your Python code goes here ...
+  db = psycopg2.connect("dbname=property")
+
+  properties = getProperty(ptype)
+
+  if properties is None:
+    print("No such property")
+    exit()
+
+  for prop in properties:
+    id, unit_no, street_no, street, ptype, list_price, sold_price, sold_date = prop
+    features = getFeatures(id)
+
+    if ptype == 'Apartment':
+      address = getApartmentAddress(id)
+    else:
+      address = getHouseAddress(id)
+
+    if maxPrice < list_price:
+      continue
+
+    noBedrooms, noBathrooms, noCarspaces = 0, 0, 0
+
+    for feat in features:
+      featName, noFeats = feat
+      # print(f"{featName}  {noFeats}")
+      if featName == 'bedrooms':
+        noBedrooms = noFeats
+        continue
+      if featName == 'bathrooms':
+        noBathrooms = noFeats
+        continue
+      if featName == 'carspaces':
+        noCarspaces = noFeats
+        continue
+
+
+    if nbeds == 0 and nbaths == 0 and ncars == 0:
+      print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+
+    if nbeds != 0 and nbaths != 0 and ncars != 0:
+      if (noBedrooms == nbeds) and (noBathrooms == nbaths) and (noCarspaces == ncars):
+        # print(prop)
+        print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+      # print(f"bedrooms: {noBedrooms}, bathrooms: {noBathrooms}, carspaces: {noCarspaces}, price: {list_price} ptype: {ptype}")
+      
+    if nbeds == 0 and nbaths != 0 and ncars != 0:
+      if ncars == noCarspaces and nbaths == noBathrooms:
+        print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+
+    if nbeds == 0 and nbaths == 0 and ncars != 0:
+      if ncars == noCarspaces:
+        print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+
+    if nbeds != 0 and nbaths == 0 and ncars != 0:
+      if nbeds == noBedrooms and ncars == noCarspaces:
+        print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+
+    if nbeds != 0 and nbaths != 0 and ncars == 0:
+      if nbeds == noBedrooms and nbaths == noBathrooms:
+        print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+
+    if nbeds != 0 and nbaths == 0 and ncars == 0:
+      if nbeds == noBedrooms:
+        print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+
+    if nbeds == 0 and nbaths != 0 and ncars == 0:
+      if nbaths == noBathrooms:
+        print(f"#{id}: {address}, {noBedrooms}br, {noBathrooms}ba, {noCarspaces}car, ${list_price}")
+
+
+    
+
+except Exception as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+

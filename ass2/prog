@@ -1,0 +1,413 @@
+#!/usr/bin/python3
+# COMP3311 21T3 Ass2 ... progression check for a given student
+
+import sys
+import psycopg2
+import re
+from helpers import *
+
+from re import search
+# define any local helper functions here
+
+### set up some globals
+
+usage = f"Usage: {sys.argv[0]} zID [Program Stream]"
+db = None
+
+### process command-line args
+
+argc = len(sys.argv)
+if argc < 2:
+  print(usage)
+  exit(1)
+zid = sys.argv[1]
+if zid[0] == 'z':
+  zid = zid[1:8]
+digits = re.compile("^\d{7}$")
+if not digits.match(zid):
+  print("Invalid student ID")
+  exit(1)
+
+progCode = None
+strmCode = None
+
+if argc == 4:
+  progCode = sys.argv[2]
+  strmCode = sys.argv[3]
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=mymyunsw")
+  stuInfo = getStudent(db,zid)
+  # print(stuInfo) # debug
+  if not stuInfo:
+    print(f"Invalid student id {zid}")
+    exit()
+
+  if progCode:
+    progInfo = getProgram(db,progCode)
+    if not progInfo:
+      print(f"Invalid program code {progCode}")
+      exit()
+    # print(progInfo)  #debug
+
+  if strmCode:
+    strmInfo = getStream(db,strmCode)
+    if not strmInfo:
+      print(f"Invalid program code {strmCode}")
+      exit()
+    # print(strmInfo)  #debug
+
+  # if have a program/stream
+  #   show progression check on supplied program/stream
+  # else
+  #   show progression check on most recent program/stream enrolment
+  # ... add your code here ...
+  zID = stuInfo[0]
+  family = stuInfo[1]
+  given = stuInfo[2]
+
+  print(f"{zID} {family}, {given}")
+
+  if strmCode is not None and progCode is not None:
+    progName = getProgramName(db, progCode)
+    strmName = getStreamName(db, strmCode)
+
+    print(f"  {progCode} {progName}")
+    print(f"  {strmCode} {strmName}")
+
+    subjects = subjectDeets(db, zID) # Completed subjects
+
+    print("\nCompleted:")
+    
+    TotalUOC = 0
+    TotalMarks = 0
+    TotalMarksUOC = 0
+
+    Xuoc = ["A", "B", "C", "D", "HD", "DN", "CR", "PS", "XE", "T", "SY", "EC", "RC", "NC"]
+    Fail = ["AF", "FL", "UF", "E", "F"]
+    Nothing = ["AS", "AW", "PW", "NA", "RD", "NF", "LE", "PE", "WD", "WJ"]
+
+    progRules = getProgramRules(db, progCode)
+    strmRules = getStreamRules(db, strmCode)
+    # print(progRules)
+    # print()
+    # print(strmRules)
+    # print()
+
+    rulesDict = {}
+
+    for progRule in progRules:
+      if progRule[4] is None:
+        rulesDict[progRule[1]] = -1
+        continue
+      rulesDict[progRule[1]] = 0
+
+    for strmRule in strmRules:
+      if strmRule[4] is None:
+        rulesDict[strmRule[1]] = -1
+        continue
+      rulesDict[strmRule[1]] = 0
+
+    # print(rulesDict)
+
+    for subject in subjects:
+      # Data fields 
+      CourseCode = subject[2]
+      Term = subject[5]
+      CourseTitle = subject[3]
+      Mark = subject[0]
+      Grade = subject[1]
+      UOC = subject[4]
+      NameOfRule = None
+
+      # Handle Gen eds
+      if CourseCode[0:3] == "GEN":
+        NameOfRule = "General Education"
+
+      for progRule in progRules:
+        if '#' in progRule[13]:
+          if CourseCode[0:5] in progRule[13]:
+            NameOfRule = progRule[1]
+            rulesDict[progRule[1]] += UOC
+            break
+
+        if CourseCode in progRule[13]:
+          NameOfRule = progRule[1]
+          rulesDict[progRule[1]] += UOC
+
+      for strmRule in strmRules:
+        # Free Electives
+        if strmRule[4] is None:
+          if NameOfRule is None and strmRule[2] == "FE":
+            NameOfRule = "Free Electives"
+            rulesDict[strmRule[1]] += UOC
+            break
+
+          if NameOfRule is not None:
+            if CourseCode in strmRule[13]:
+              NameOfRule = strmRule[1] + " + " + NameOfRule
+              rulesDict[strmRule[1]] += UOC
+              break
+
+          if NameOfRule is None:
+            if '#' in strmRule[13]:
+              if CourseCode[0:5] in strmRule[13]:
+                NameOfRule = strmRule[1]
+                rulesDict[strmRule[1]] += UOC
+                break
+
+            if CourseCode in strmRule[13]:
+              NameOfRule = strmRule[1]
+              rulesDict[strmRule[1]] += UOC
+              break
+
+        else:
+          if NameOfRule is None and strmRule[2] == "FE" and not rulesDict[strmRule[1]] >= strmRule[4]:
+            NameOfRule = "Free Electives"
+            rulesDict[strmRule[1]] += UOC
+            break
+
+          if NameOfRule is not None:
+            if CourseCode in strmRule[13] and not rulesDict[strmRule[1]] >= strmRule[4]:
+              NameOfRule = strmRule[1] + " + " + NameOfRule
+              rulesDict[strmRule[1]] += UOC
+              break
+
+          if NameOfRule is None:
+            if '#' in strmRule[13]:
+              if CourseCode[0:5] in strmRule[13] and not rulesDict[strmRule[1]] >= strmRule[4]:
+                NameOfRule = strmRule[1]
+                rulesDict[strmRule[1]] += UOC
+                break
+
+            if CourseCode in strmRule[13] and not rulesDict[strmRule[1]] >= strmRule[4]:
+              NameOfRule = strmRule[1]
+              rulesDict[strmRule[1]] += UOC
+              break
+      
+
+      if Grade in Fail:
+        if Mark is None:
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}  - {Grade}   fail does not count")
+        else :
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}{Mark:>3} {Grade}   fail does not count")
+      elif NameOfRule is None:
+        UOC = 0
+        if Mark is None:
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}  - {Grade}   {UOC}uoc does not satisfy any rule")
+        else :
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}{Mark:>3} {Grade}   {UOC}uoc does not satisfy any rule")
+      elif Mark is None:
+        print(f"{CourseCode} {Term} {CourseTitle:<32s}  - {Grade}   {UOC}uoc towards {NameOfRule}")
+      else :
+        print(f"{CourseCode} {Term} {CourseTitle:<32s}{Mark:>3} {Grade}   {UOC}uoc towards {NameOfRule}")
+
+      if Grade in Xuoc:
+        TotalUOC += UOC
+    
+    print(f"UOC = {TotalUOC} so far")
+    print("\nRemaining to complete degree:")
+
+    # Get subjects required which are not streams
+    subjectsRequired = getStreamSubjects(db, strmCode)
+    subjectsRequired += getProgramSubjects(db, progCode)
+
+    subjectsCompleted = getSubjectsCompleted(db, zID)
+    
+    for subjectTBC in subjectsRequired:
+      if re.match(r'{[A-Z]{4}[0-9]{4};[A-Z]{4}[0-9]{4}}', subjectTBC):
+        toSplit = subjectTBC.lstrip("{").rstrip("}")
+        a, b = toSplit.split(';')
+        nameA = getSubjectName(db, a)
+        nameB = getSubjectName(db, b)
+        if a in subjectsCompleted or b in subjectsCompleted:
+          continue
+        else:
+          print(f"- {a} {nameA}")
+          print(f"  or {b} {nameB}")
+          continue
+
+      name = getSubjectName(db, subjectTBC)
+      if subjectTBC in subjectsCompleted:
+        continue
+      else:
+        print(f"- {subjectTBC} {name}")
+
+
+  else: 
+    progCode = getLatestProgramStreamCode(db, zID)[0]
+    strmCode = getLatestProgramStreamCode(db, zID)[1]
+
+    progName = getProgramName(db, progCode)
+    strmName = getStreamName(db, strmCode)
+
+    print(f"  {progCode} {progName}")
+    print(f"  {strmCode} {strmName}")
+
+    subjects = subjectDeets(db, zID) # Completed subjects
+
+    print("\nCompleted:")
+    
+    TotalUOC = 0
+    TotalMarks = 0
+    TotalMarksUOC = 0
+
+    Xuoc = ["A", "B", "C", "D", "HD", "DN", "CR", "PS", "XE", "T", "SY", "EC", "RC", "NC"]
+    Fail = ["AF", "FL", "UF", "E", "F"]
+    Nothing = ["AS", "AW", "PW", "NA", "RD", "NF", "LE", "PE", "WD", "WJ"]
+
+    progRules = getProgramRules(db, progCode)
+    strmRules = getStreamRules(db, strmCode)
+    # print(progRules)
+    # print()
+    # print(strmRules)
+    # print()
+
+    rulesDict = {}
+
+    for progRule in progRules:
+      if progRule[4] is None:
+        rulesDict[progRule[1]] = -1
+        continue
+      rulesDict[progRule[1]] = 0
+
+    for strmRule in strmRules:
+      if strmRule[4] is None:
+        rulesDict[strmRule[1]] = -1
+        continue
+      rulesDict[strmRule[1]] = 0
+
+    # print(rulesDict)
+
+    for subject in subjects:
+      # Data fields 
+      CourseCode = subject[2]
+      Term = subject[5]
+      CourseTitle = subject[3]
+      Mark = subject[0]
+      Grade = subject[1]
+      UOC = subject[4]
+      NameOfRule = None
+
+      # Handle Gen eds
+      if CourseCode[0:3] == "GEN":
+        NameOfRule = "General Education"
+
+      for progRule in progRules:
+        
+        if '#' in progRule[13]:
+          if CourseCode[0:5] in progRule[13]:
+            NameOfRule = progRule[1]
+            rulesDict[progRule[1]] += UOC
+            break
+
+        if CourseCode in progRule[13]:
+          NameOfRule = progRule[1]
+          rulesDict[progRule[1]] += UOC
+
+      for strmRule in strmRules:
+        # Free Electives
+        if strmRule[4] is None:
+          if NameOfRule is None and strmRule[2] == "FE":
+            NameOfRule = "Free Electives"
+            rulesDict[strmRule[1]] += UOC
+            break
+
+          if NameOfRule is not None:
+            if CourseCode in strmRule[13]:
+              NameOfRule = strmRule[1] + " + " + NameOfRule
+              rulesDict[strmRule[1]] += UOC
+              break
+
+          if NameOfRule is None:
+            if '#' in strmRule[13]:
+              if CourseCode[0:5] in strmRule[13]:
+                NameOfRule = strmRule[1]
+                rulesDict[strmRule[1]] += UOC
+                break
+
+            if CourseCode in strmRule[13]:
+              NameOfRule = strmRule[1]
+              rulesDict[strmRule[1]] += UOC
+              break
+
+        else:
+          if NameOfRule is None and strmRule[2] == "FE" and not rulesDict[strmRule[1]] >= strmRule[4]:
+            NameOfRule = "Free Electives"
+            rulesDict[strmRule[1]] += UOC
+            break
+
+          if NameOfRule is not None:
+            if CourseCode in strmRule[13] and not rulesDict[strmRule[1]] >= strmRule[4]:
+              NameOfRule = strmRule[1] + " + " + NameOfRule
+              rulesDict[strmRule[1]] += UOC
+              break
+
+          if NameOfRule is None:
+            if '#' in strmRule[13]:
+              if CourseCode[0:5] in strmRule[13] and not rulesDict[strmRule[1]] >= strmRule[4]:
+                NameOfRule = strmRule[1]
+                rulesDict[strmRule[1]] += UOC
+                break
+
+            if CourseCode in strmRule[13] and not rulesDict[strmRule[1]] >= strmRule[4]:
+              NameOfRule = strmRule[1]
+              rulesDict[strmRule[1]] += UOC
+              break
+      
+      if Grade in Fail:
+        if Mark is None:
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}  - {Grade}   fail does not count")
+        else :
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}{Mark:>3} {Grade}   fail does not count")
+      elif NameOfRule is None:
+        UOC = 0
+        if Mark is None:
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}  - {Grade}   {UOC}uoc does not satisfy any rule")
+        else :
+          print(f"{CourseCode} {Term} {CourseTitle:<32s}{Mark:>3} {Grade}   {UOC}uoc does not satisfy any rule")
+      elif Mark is None:
+        print(f"{CourseCode} {Term} {CourseTitle:<32s}  - {Grade}   {UOC}uoc towards {NameOfRule}")
+      else :
+        print(f"{CourseCode} {Term} {CourseTitle:<32s}{Mark:>3} {Grade}   {UOC}uoc towards {NameOfRule}")
+
+      if Grade in Xuoc:
+        TotalUOC += UOC
+    print(f"UOC = {TotalUOC} so far")
+
+    print("\nRemaining to complete degree:")
+
+    # Get subjects required which are not streams
+    subjectsRequired = getStreamSubjects(db, strmCode)
+    subjectsRequired += getProgramSubjects(db, progCode)
+
+    subjectsCompleted = getSubjectsCompleted(db, zID)
+    
+    for subjectTBC in subjectsRequired:
+      if re.match(r'{[A-Z]{4}[0-9]{4};[A-Z]{4}[0-9]{4}}', subjectTBC):
+        toSplit = subjectTBC.lstrip("{").rstrip("}")
+        a, b = toSplit.split(';')
+        nameA = getSubjectName(db, a)
+        nameB = getSubjectName(db, b)
+        if a in subjectsCompleted or b in subjectsCompleted:
+          continue
+        else:
+          print(f"- {a} {nameA}")
+          print(f"  or {b} {nameB}")
+          continue
+
+      name = getSubjectName(db, subjectTBC)
+      if subjectTBC in subjectsCompleted:
+        continue
+      else:
+        print(f"- {subjectTBC} {name}")
+
+
+except Exception as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+

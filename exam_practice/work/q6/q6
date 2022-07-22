@@ -1,0 +1,119 @@
+#!/usr/bin/python3
+# COMP3311 20T2 Final Exam
+# Q6: print match reports for a specified team in a given year
+
+import sys
+import psycopg2
+
+import re
+
+# ... put helper functions here ...
+
+def getResult(g1, g2):
+   if g1 == g2:
+      return "drew"
+   elif g1 > g2:
+      return "won"
+   else:
+      return "lost"
+
+def getTeamID(country):
+   cur = db.cursor()
+   cur.execute("select id from teams where country = %s",[country])
+   info = cur.fetchone()
+   cur.close()
+   if not info:
+      return None
+   else:
+      return info
+
+def getMatch(id, year):
+   cur = db.cursor()
+   qry = '''
+   select *
+   from matches m
+      join involves i on i.match = m.id
+   where i.team = %s and CAST(m.playedon as varchar) ~ %s
+   order by playedon;
+   '''
+   cur.execute(qry,[id, year])
+   info = cur.fetchall()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+def getOpponent(match, country):
+   cur = db.cursor()
+   qry = '''
+   select t.country
+   from teams t
+      join involves i on i.team = t.id
+      join matches m on m.id = i.match
+   where m.id = %s and t.country <> %s
+   '''
+   cur.execute(qry,[match, country])
+   info = cur.fetchone()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+      
+
+db = None
+cur = None
+
+if len(sys.argv) < 3:
+   print(f"Usage: {sys.argv[0]} TeamName Year")
+   exit(1)
+team = sys.argv[1]
+year = sys.argv[2]
+if not year.isnumeric():
+   print(f"Invalid year {year}")
+   exit(1)
+
+try:
+   db = psycopg2.connect("dbname=footy")
+   # ... your code goes here ...
+
+   if getTeamID(team) is None:
+      print(f"No team \'{team}\'")
+      exit()
+
+   countryID = getTeamID(team)[0]
+
+   matches = getMatch(countryID, year)
+   # print(len(matches))
+
+
+   if matches is None:
+      print("No matches")
+      exit()
+
+   for match in matches:
+      # print(match)
+      # print(getOpponent(match[0], team)[0])
+      opponent = getOpponent(match[0], team)[0]
+      location = match[1]
+      date = match[2]
+
+      print(f"played {opponent} in {location} on {date} and outcome score")
+
+except psycopg2.Error as err:
+	print("DB error: ", err)
+finally:
+   if db:
+      db.close()
+   if cur:
+       cur.close()
+       
+
+# select *
+# from matches m
+#    join involves i on i.match = m.id
+# where i.team = 2 and CAST(m.playedon as varchar) ~ '2006'
+# order by playedon;

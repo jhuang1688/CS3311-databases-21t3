@@ -1,0 +1,158 @@
+# COMP3311 20T2 Final Exam
+# Q7: print a specified player's career performance
+
+import sys
+import psycopg2
+
+# ... put any helper functions here ...
+
+def getPlayerDetails(player):
+   cur = db.cursor()
+   qry = '''
+   select *
+   from players p
+   where p.name = %s
+   '''
+   cur.execute(qry,[player])
+   info = cur.fetchone()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+def getPlayerGoals(id):
+   cur = db.cursor()
+   qry = '''
+   select *
+   from matches m
+      join goals g on g.scoredin = m.id
+   where g.scoredby = %s
+   order by m.playedon
+   '''
+   cur.execute(qry,[id])
+   info = cur.fetchall()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+def getGoalAmount(match, id):
+   cur = db.cursor()
+   qry = '''
+   select count(*) from Goals where scoredIn = %s and scoredBy = %s;
+   '''
+   cur.execute(qry,[match, id])
+   info = cur.fetchall()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+def getCountry(player):
+   cur = db.cursor()
+   qry = '''
+   select t.country
+   from   Teams t join Players p on (t.id = p.memberof)
+   where  p.id = %s;
+   '''
+   cur.execute(qry,[match, player])
+   info = cur.fetchall()
+   cur.close()
+   
+   if not info:
+      return None
+   else:
+      return info
+
+def getTotalGames(player):
+   cur = db.cursor()
+   qry = '''
+   select count(m.playedon)
+   from   Teams t join Involves i on (i.team=t.id)
+         join Matches m on (m.id=i.match)
+         join Players p on (t.id=p.memberof)
+   where  p.id = %s
+   group by m.playedOn
+   order  by m.playedOn;
+   '''
+   cur.execute(qry,[player])
+   info = cur.fetchone()
+   cur.close()
+   
+   total = 0
+
+   for tuple in info:
+      total += 1
+
+   return total
+
+db = None
+cur = None
+
+if len(sys.argv) < 2:
+   print(f"Usage: {sys.argv[0]} PlayerName")
+   exit(1)
+player = sys.argv[1]
+
+try:
+   db = psycopg2.connect("dbname=footy")
+   # ... your code goes here ...
+
+   print("hello")
+   if getPlayerDetails(player) is None:
+      print("No such player")
+      exit()
+
+   playerID = getPlayerDetails(player)
+
+   matches = getPlayerGoals(playerID)
+
+   totalGoals = 0
+   for goalMatch in matches:
+      city = goalMatch[1]
+      date = goalMatch[2]
+
+      matchID = goalMatch[0]
+      goalsScored = getGoalAmount(matchID, playerID)
+
+      totalGoals += goalsScored
+
+      if goalsScored == 1:
+         goals = " and scored 1 goal"
+      else:
+         goals = f" and scored {goalsScored} goals"
+
+      print(f"played in {city} on {date} and scored {goals}")
+
+   country = getCountry(playerID)
+
+   totalMatches = getTotalGames(playerID)
+
+   if totalGoals == 1:
+      goalString = "1 goal"
+   else:
+      goalString = f"{totalGoals} goals"
+
+   print("Summary: played for {country}, {totalMatches} matches, {goalstring}")
+
+
+except psycopg2.Error as err:
+	print("DB error: ", err)
+finally:
+   if cur:
+       cur.close()
+   if db:
+      db.close()
+       
+
+
+select count(*)
+from matches m 
+   join teams t on t.id = 
+   join involves i on i.team = t.id

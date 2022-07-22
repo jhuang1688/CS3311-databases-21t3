@@ -1,0 +1,32 @@
+# COMP3311 21T3 Final Exam Q6
+# SQL schema from ER design
+
+CREATE TABLE User (
+    id          serial
+    name        text NOT NULL
+    email       text NOT NULL
+    primary key (id)
+);
+
+CREATE TYPE Tags as enum('vegetarian', 'spicy', 'korean', 'easy-to-make');
+
+CREATE TABLE Recipe (
+    id          serial
+    title       text NOT NULL
+    tags        text NOT NULL
+    user        integer not null references User (id)
+    primary key (id)
+);
+
+CREATE TABLE Ingeredients (
+    id          serial
+    name        text NOT NULL
+    primary key (id)
+);
+
+CREATE TABLE Uses (
+    amount      integer         check (amount greater than 0)
+    unit        text NOT NULL
+    primary key (Recipe, ingredient)
+);
+

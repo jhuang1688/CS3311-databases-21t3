@@ -1,0 +1,1 @@
+psql:q4.sql:36: ERROR:  syntax error at or near "select"

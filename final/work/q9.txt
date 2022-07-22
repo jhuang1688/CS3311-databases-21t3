@@ -1,0 +1,23 @@
+# COMP3311 21T3 Final Exam Q9
+# Flight booking triggers
+
+(A)
+
+The pre_booking_check() checks if the flight no exists, then also if the flight is full, raising an error if so.
+
+(B)
+
+
+
+(C)
+
+Since the seat is empty the sql statement will not raise any exception errors
+
+(D)
+
+Since the flight is full the sql statement will raise an exception errors for booking error.
+
+(E)
+
+The seat will now be empty
+

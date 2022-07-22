@@ -1,0 +1,140 @@
+#!/usr/bin/python3
+# COMP3311 21T3 Ass2 ... print a transcript for a given student
+
+import sys
+import psycopg2
+import re
+from helpers import getStudent
+
+from helpers import *
+
+# define any local helper functions here
+
+### set up some globals
+
+usage = f"Usage: {sys.argv[0]} zID"
+db = None
+
+### process command-line args
+
+argc = len(sys.argv)
+if argc < 2:
+  print(usage)
+  exit(1)
+zid = sys.argv[1]
+if zid[0] == 'z':
+  zid = zid[1:8]
+digits = re.compile("^\d{7}$")
+if not digits.match(zid):
+  print(f"Invalid student ID {zid}")
+  exit(1)
+
+# manipulate database
+
+try:
+  db = psycopg2.connect("dbname=mymyunsw")
+  stuInfo = getStudent(db,zid)
+  if not stuInfo:
+    print(f"Invalid student ID {zid}")
+    exit()
+
+  #print(stuInfo) # debug
+  # Print transcript for Student
+  # ... add your code here ...
+
+  # Print zID, last name, first name
+  # print(subjectDeets(db, zid))
+  print(f"{zid} {stuInfo[1]}, {stuInfo[2]}")
+
+  # Print out courses from tuple
+
+  TotalUOC = 0
+  TotalMarks = 0
+  TotalMarksUOC = 0
+
+  Xuoc = ["A", "B", "C", "D", "HD", "DN", "CR", "PS", "XE", "T", "SY", "EC", "RC", "NC"]
+  Fail = ["AF", "FL", "UF", "E", "F"]
+  Nothing = ["AS", "AW", "PW", "NA", "RD", "NF", "LE", "PE", "WD", "WJ"]
+
+  subjects = subjectDeets(db, zid)
+
+  for subject in subjects:
+    # Data fields 
+    CourseCode = subject[2]
+    Term = subject[5]
+    SubjectTitle = subject[3]
+    Mark = subject[0]
+    Grade = subject[1]
+    UOC = subject[4]
+
+    # Print out courses line by line
+
+    # SY grade but still counts towards Uoc
+    if (Mark is None) and (Grade in Xuoc):
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}  - {Grade:2s}  {UOC:2d}uoc")
+    
+    # Fail with no mark
+    elif (Mark is None) and (Grade in Fail):
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}  - {Grade:2s}   fail")
+      TotalMarksUOC += UOC
+    
+    # Fail with mark
+    elif (Mark is not None) and (Grade in Fail):
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}{Mark:>3} {Grade:2s}   fail")
+      TotalMarks += Mark * UOC
+      TotalMarksUOC += UOC
+    
+    # No action required but still appears on transcript
+    elif (Mark is None) and (Grade in Nothing):
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}  - {Grade:2s}")
+    
+    # Normal grade and mark
+    else:
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}{Mark:>3} {Grade:2s}  {UOC:2d}uoc")
+      TotalMarks += Mark * UOC
+      TotalMarksUOC += UOC
+
+    if Grade in Xuoc:
+      TotalUOC += UOC
+
+  FinalWAM = round(TotalMarks / TotalMarksUOC, 1)
+  # For debugging purposes only
+  # print(f"UOC = {TotalUOC}, WAM = {TotalMarks}/{TotalMarksUOC} = {FinalWAM}")
+  print(f"UOC = {TotalUOC}, WAM = {FinalWAM}")
+
+  """for record in getStudentCourseEnrolments(db,zid):
+    subjDetails = getSubjectDetails(db, record[1])
+
+    # print(record)
+    # print(subjDetails)
+    
+    # Data fields 
+    CourseCode = subjDetails[0][0]
+    Term = getTermCode(db, record[1])
+    SubjectTitle = subjDetails[0][1]
+    Mark = record[2]
+    Grade = record[3]
+    UOC = subjDetails[0][2]
+
+    if (Mark is None) and (Grade not in Fail):
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}  - {Grade:2s}  {UOC:2d}uoc")
+    elif (Mark is None) and (Grade in Fail):
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}  - {Grade:2s}  {UOC:2d}uoc")
+      TotalMarksUOC += UOC
+    else:
+      print(f"{CourseCode} {Term} {SubjectTitle:<32s}{Mark:>3} {Grade:2s}  {UOC:2d}uoc")
+      TotalMarks += Mark * UOC
+      TotalMarksUOC += UOC
+    
+    # If passed add to TotalUOC
+
+    if Grade in Xuoc:
+      TotalUOC += UOC"""
+    
+
+except Exception as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+

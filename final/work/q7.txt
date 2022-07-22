@@ -1,0 +1,22 @@
+# COMP3311 21T3 Final Exam Q7
+# Python/Psycopg2 scripts
+
+(A)
+
+Yes same output
+
+
+(B)
+
+A: Executes one time for c1 to get the terms, and 10 times for each term to get every subject
+Answer: 11 execute() methods
+
+B: Executes one time overall
+Answer: 1 execute() method
+
+
+(C)
+
+Script B is likely to be faster since it only performs execute() once
+
+

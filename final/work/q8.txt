@@ -1,0 +1,17 @@
+# COMP3311 21T3 Final Exam Q8
+# Query execution times
+
+(A)
+
+The first exewcution tends to be slower than subsequent executions since the first query needs to start on a fresh database server. 
+
+Once a query is executed the data gets stored within the cache thus faster execution times theron
+
+
+(B)
+
+
+The first query is most likey faster because finding the max id should be quicker since the data type would be an integer. 
+The slower query has to compare date values which would take longer since it isnt simply an integer.
+The max function for the date would have to compute the year, month and day thus taking three operations.
+
